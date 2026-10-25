@@ -1,0 +1,21 @@
+[package]
+name = "libspd"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "Apache-2.0"
+description = "Hardware-independent SPD image parsing and manipulation"
+readme = "README.md"
+repository = "https://github.com/TeskesLab/libspd"
+homepage = "https://github.com/TeskesLab/libspd"
+documentation = "https://docs.rs/libspd"
+keywords = ["spd", "memory", "ddr", "no-std"]
+categories = ["parser-implementations", "no-std"]
+
+[workspace]
+members = ["ffi"]
+resolver = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
