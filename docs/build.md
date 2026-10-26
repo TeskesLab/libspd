@@ -17,7 +17,7 @@ sh scripts/check.sh
 
 The check script runs formatting checks, Clippy with warnings denied, workspace tests and rustdoc examples, core-only compilation, API documentation with warnings denied, both Rust-guide examples, both Rust integration examples, a release native build, and both native examples. Native examples compile with `-DNDEBUG`; their explicit behavioral checks remain active. The script fixes `CARGO_TARGET_DIR` to the repository's `target/` so all native paths agree. Set `CC` and `CXX` to alternate compiler executable paths if required.
 
-The native smoke-link commands currently target Linux. Building the Rust crates on another target does not establish that platform's ABI/linking support. Adapt system-library names and shared-library loader configuration for another platform; do not claim it tested from a Linux run.
+The full `scripts/check.sh` smoke-link commands target Linux. The separate `scripts/release.py package --target TARGET` command builds a native package and compiles/runs consumers against its extracted header/libraries on Linux, Windows/MSVC, or macOS. Cross-platform CI configuration is not proof of a completed remote run; see [release validation limits](releases.md#validation-boundary).
 
 ## Rust consumers
 
@@ -61,7 +61,7 @@ Both examples use the same C ABI and synthetic in-memory callbacks. They exercis
 
 ## Automation and evidence limits
 
-`.gitea/workflows/ci.yml` runs the same check script on Rust 1.81.0 and stable. It requires Gitea Actions enabled and an `ubuntu-latest` runner with C/C++ tools. The workflow is repository configuration, not evidence of a completed remote run. No tickets, releases, or pull requests are published by these commands.
+GitHub Actions is the primary automation host: `.github/workflows/ci.yml` runs the Linux quality/MSRV checks, and the shared native workflow builds and consumes ZIP packages on Linux, Windows, and macOS. `.github/workflows/release.yml` prepares draft releases from matching version tags; manual dispatch builds artifacts only. See [native releases](releases.md) for targets, archive layout, trigger/permission policy, and verification limits. No remote workflow execution or publication is implied by local checks.
 
 Synthetic tests can establish bounds handling, byte preservation, CRC arithmetic, and ABI behavior. They cannot establish JEDEC semantic conformance, supported real-module coverage, hardware compatibility, write safety, or protection restoration. See the fixture and specification gates in [the plan](plan.md).
 

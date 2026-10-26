@@ -62,6 +62,10 @@ Build with `cargo build -p libspd-ffi --release`, include
 [`libspd.h`](include/libspd.h), and link the native library. Linux builds produce
 `target/release/libspd.a` and `libspd.so`. C++ uses the same C header directly.
 
+The [native release flow](docs/releases.md) builds ZIP packages for Linux x64,
+Windows x64/MSVC, and macOS x64/ARM64, with matching headers and documentation.
+Version-tag builds prepare draft GitHub releases; no crates.io publishing is automatic.
+
 The [FFI guide](docs/ffi.md) includes complete examples, linking commands,
 ownership rules, and callback contracts. Applications supply hardware access;
 libspd never opens a bus or invokes callbacks while parsing an image.

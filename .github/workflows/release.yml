@@ -1,0 +1,124 @@
+name: Native release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Validate release version
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate manifest versions and tag
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="$(python scripts/release.py version --tag "$GITHUB_REF_NAME")"
+          else
+            version="$(python scripts/release.py version)"
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+  check:
+    name: Release quality / Rust ${{ matrix.toolchain }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.81.0", stable]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+      - run: sh scripts/check.sh
+
+  native:
+    name: Native packages
+    needs: version
+    uses: ./.github/workflows/native.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  draft:
+    name: Create draft release
+    needs: [version, native, check]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref_type == 'tag' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.repository == 'TeskesLab/libspd'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    concurrency:
+      group: native-release-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      # No checkout or execution of downloaded code in this privileged job.
+      - name: Download all four verified native packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: libspd-*
+          merge-multiple: true
+          path: target/dist
+      - name: Validate attachments and create unpublished draft
+        shell: bash
+        working-directory: target/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$RELEASE_TAG" = "v$RELEASE_VERSION"
+          # The tag endpoint can omit drafts; inspect every release page.
+          existing="$(gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" |
+            jq --arg tag "$RELEASE_TAG" '[.[][] | select(.tag_name == $tag)] | length')"
+          if [[ "$existing" -ne 0 ]]; then
+            printf 'Release already exists for %s; refusing a duplicate draft.\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+          targets=(
+            x86_64-unknown-linux-gnu
+            x86_64-pc-windows-msvc
+            x86_64-apple-darwin
+            aarch64-apple-darwin
+          )
+          assets=()
+          for target in "${targets[@]}"; do
+            archive="libspd-$RELEASE_VERSION-$target.zip"
+            checksum="$archive.sha256"
+            test -f "$archive"
+            test -f "$checksum"
+            expected_checksum="$(sha256sum "$archive")"
+            actual_checksum="$(cat "$checksum")"
+            test "$actual_checksum" = "$expected_checksum"
+            assets+=("$archive" "$checksum")
+          done
+          options=(--draft --verify-tag --title "$RELEASE_TAG")
+          if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then
+            options+=(--prerelease)
+          fi
+          notes="Native ZIP packages include the C header, static and shared libraries, and C/C++ examples. Each archive passed extracted-package consumer checks on its native runner. SHA256 sidecars are attached.
+
+          Automated by MisterMal"
+          # Existing releases fail rather than being modified or overwritten.
+          gh release create "$RELEASE_TAG" "${assets[@]}" "${options[@]}" --notes "$notes"

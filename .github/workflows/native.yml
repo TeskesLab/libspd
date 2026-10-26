@@ -1,0 +1,66 @@
+name: Native packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Validated Cargo package version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+          # macos-15 is ARM64; Intel has a distinct explicit label.
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Initialize MSVC tools
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Check package version
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="$(python scripts/release.py version)"
+          test "$version" = "$EXPECTED_VERSION"
+      - name: Build ZIP and test extracted C/C++ consumers
+        env:
+          PACKAGE_TARGET: ${{ matrix.target }}
+        run: python scripts/release.py package --target "$PACKAGE_TARGET"
+      - name: Upload verified native package and SHA256
+        uses: actions/upload-artifact@v4
+        with:
+          name: libspd-${{ matrix.target }}
+          path: |
+            target/dist/libspd-${{ inputs.version }}-${{ matrix.target }}.zip
+            target/dist/libspd-${{ inputs.version }}-${{ matrix.target }}.zip.sha256
+          if-no-files-found: error

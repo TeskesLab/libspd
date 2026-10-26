@@ -50,10 +50,4 @@
 
 - Do not commit, push, publish tickets, or open pull requests unless authorized. Local planning belongs in `docs/plan.md`; ticket publication requires explicit permission.
 - Before an authorized commit, run the review agent and resolve critical/high findings.
-- Every commit must use `git commit -S`; do not disable signing or configure keys. End every commit message with exactly:
-
-  ```text
-  🤖 Generated with Mister Maluco
-
-  Co-Authored-By: MisterMal <teskeslab@lucasteske.dev>
-  ```
+- Every commit must use `git commit -S`; do not disable signing or configure keys.
