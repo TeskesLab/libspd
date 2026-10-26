@@ -25,6 +25,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = {
     "x86_64-unknown-linux-gnu": ("Linux", "x86_64", ("libspd.a", "libspd.so")),
+    "aarch64-unknown-linux-gnu": ("Linux", "aarch64", ("libspd.a", "libspd.so")),
     "x86_64-pc-windows-msvc": ("Windows", "x86_64", ("spd.lib", "spd.dll", "spd.dll.lib")),
     "x86_64-apple-darwin": ("Darwin", "x86_64", ("libspd.a", "libspd.dylib")),
     "aarch64-apple-darwin": ("Darwin", "aarch64", ("libspd.a", "libspd.dylib")),
@@ -145,7 +146,30 @@ def static_libraries(cargo, target, env):
     return libraries
 
 
-def smoke_consumers(directory, target, compilers, libraries, env):
+def check_elf(binary, target, env):
+    machines = {
+        "x86_64-unknown-linux-gnu": "Advanced Micro Devices X86-64",
+        "aarch64-unknown-linux-gnu": "AArch64",
+    }
+    child_env = env.copy()
+    child_env["LC_ALL"] = "C"
+    header = run(
+        [executable("readelf"), "-h", binary],
+        cwd=ROOT, env=child_env, capture=True,
+    )
+    fields = {
+        name: re.findall(rf"^\s*{name}:\s*(.+?)\s*$", header, re.MULTILINE)
+        for name in ("Class", "Data", "Machine")
+    }
+    if (
+        fields["Class"] != ["ELF64"]
+        or fields["Data"] != ["2's complement, little endian"]
+        or fields["Machine"] != [machines[target]]
+    ):
+        raise RuntimeError(f"not a little-endian ELF64 {target} binary: {binary}")
+
+
+def smoke_consumers(directory, target, compilers, libraries, env, runner=()):
     system = TARGETS[target][0]
     include = directory / "include"
     lib = directory / "lib"
@@ -170,7 +194,7 @@ def smoke_consumers(directory, target, compilers, libraries, env):
                  lib / library, *dependencies],
                 cwd=binaries, env=child_env,
             )
-            run([binary], cwd=binaries, env=child_env)
+            run([*runner, binary], cwd=binaries, env=child_env)
     else:
         # Do not let an inherited loader override accidentally satisfy a smoke
         # check with a non-packaged library. The shared consumer uses its rpath.
@@ -184,7 +208,9 @@ def smoke_consumers(directory, target, compilers, libraries, env):
              *libraries, "-o", static_binary],
             cwd=binaries, env=child_env,
         )
-        run([static_binary], cwd=binaries, env=child_env)
+        if target == "aarch64-unknown-linux-gnu":
+            check_elf(static_binary, target, child_env)
+        run([*runner, static_binary], cwd=binaries, env=child_env)
         shared_binary = binaries / "native-cpp-shared"
         loader_path = "$ORIGIN/../lib" if system == "Linux" else "@loader_path/../lib"
         run(
@@ -192,7 +218,9 @@ def smoke_consumers(directory, target, compilers, libraries, env):
              "-lspd", f"-Wl,-rpath,{loader_path}", "-o", shared_binary],
             cwd=binaries, env=child_env,
         )
-        run([shared_binary], cwd=binaries, env=child_env)
+        if target == "aarch64-unknown-linux-gnu":
+            check_elf(shared_binary, target, child_env)
+        run([*runner, shared_binary], cwd=binaries, env=child_env)
     print(f"Extracted-archive C/C++ static/shared consumers passed for {target}.", file=sys.stderr)
 
 

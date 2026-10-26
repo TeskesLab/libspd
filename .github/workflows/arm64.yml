@@ -1,0 +1,31 @@
+name: Linux ARM64 packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Validated Cargo package version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Debian 12 ARM64 cross-build
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-22.04
+    container: node:22-bookworm-slim
+    steps:
+      # Install Git and TLS support before checkout in the minimal container.
+      - name: Install checkout tools
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates git
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/arm64-packages
+        with:
+          version: ${{ inputs.version }}

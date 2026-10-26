@@ -1,0 +1,75 @@
+name: Linux ARM64 release packages
+description: Cross-build Linux ARM64 ZIP and Debian packages and run consumers under QEMU
+inputs:
+  version:
+    description: Validated Cargo package version
+    required: true
+runs:
+  using: composite
+  steps:
+    # The caller supplies Node 22/Bookworm and checks out without credentials.
+    - name: Install ARM64 cross-build and consumer tools
+      shell: bash
+      run: |
+        dpkg --add-architecture arm64
+        apt-get update
+        apt-get install --no-install-recommends -y \
+          gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+          qemu-user build-essential python3 dpkg-dev pkg-config binutils git ca-certificates curl xz-utils \
+          libc6-dev:arm64 libgcc-s1:arm64 libstdc++6:arm64
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-unknown-linux-gnu
+    - name: Check package versions
+      id: version
+      shell: bash
+      env:
+        EXPECTED_VERSION: ${{ inputs.version }}
+      run: |
+        version="$(python3 scripts/release.py version)"
+        test "$version" = "$EXPECTED_VERSION"
+        debian_version="$(python3 scripts/debian.py version)"
+        printf 'debian_version=%s\n' "$debian_version" >> "$GITHUB_OUTPUT"
+    - name: Cross-build ARM64 ZIP and test extracted consumers under QEMU
+      shell: bash
+      run: python3 scripts/arm64.py package
+    - name: Cross-build ARM64 Debian packages and test extracted consumers under QEMU
+      shell: bash
+      run: python3 scripts/debian.py package --architecture arm64
+    - name: Install ARM64 runtime and development packages
+      shell: bash
+      env:
+        DEBIAN_VERSION: ${{ steps.version.outputs.debian_version }}
+      run: |
+        apt-get install --no-install-recommends -y \
+          "./target/dist/libspd1_${DEBIAN_VERSION}_arm64.deb" \
+          "./target/dist/libspd-dev_${DEBIAN_VERSION}_arm64.deb"
+    - name: Test installed ARM64 pkg-config and C/C++ consumers under QEMU
+      shell: bash
+      run: python3 scripts/debian.py smoke --architecture arm64
+    - name: Upload verified ARM64 packages and checksums on GitHub
+      if: github.server_url == 'https://github.com'
+      uses: actions/upload-artifact@v4
+      with:
+        name: libspd-arm64-packages
+        path: |
+          target/dist/libspd-${{ inputs.version }}-aarch64-unknown-linux-gnu.zip
+          target/dist/libspd-${{ inputs.version }}-aarch64-unknown-linux-gnu.zip.sha256
+          target/dist/libspd1_${{ steps.version.outputs.debian_version }}_arm64.deb
+          target/dist/libspd1_${{ steps.version.outputs.debian_version }}_arm64.deb.sha256
+          target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_arm64.deb
+          target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_arm64.deb.sha256
+        if-no-files-found: error
+    - name: Upload verified ARM64 packages and checksums on Gitea
+      if: github.server_url != 'https://github.com'
+      uses: ChristopherHX/gitea-upload-artifact@v4
+      with:
+        name: libspd-arm64-packages
+        path: |
+          target/dist/libspd-${{ inputs.version }}-aarch64-unknown-linux-gnu.zip
+          target/dist/libspd-${{ inputs.version }}-aarch64-unknown-linux-gnu.zip.sha256
+          target/dist/libspd1_${{ steps.version.outputs.debian_version }}_arm64.deb
+          target/dist/libspd1_${{ steps.version.outputs.debian_version }}_arm64.deb.sha256
+          target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_arm64.deb
+          target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_arm64.deb.sha256
+        if-no-files-found: error

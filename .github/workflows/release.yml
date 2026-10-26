@@ -79,6 +79,14 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
 
+  arm64:
+    name: Linux ARM64 cross-packages
+    if: github.server_url == 'https://github.com'
+    needs: version
+    uses: ./.github/workflows/arm64.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
   gitea_packages:
     name: Gitea packages
     if: github.server_url != 'https://github.com'
@@ -99,7 +107,7 @@ jobs:
 
   draft:
     name: Create draft release
-    needs: [version, native, debian, mingw, check]
+    needs: [version, native, debian, mingw, arm64, check]
     if: >-
       github.event_name == 'push' &&
       github.server_url == 'https://github.com' &&
@@ -140,6 +148,7 @@ jobs:
           fi
           targets=(
             x86_64-unknown-linux-gnu
+            aarch64-unknown-linux-gnu
             x86_64-pc-windows-msvc
             x86_64-pc-windows-gnu
             x86_64-apple-darwin
@@ -156,21 +165,23 @@ jobs:
             test "$actual_checksum" = "$expected_checksum"
             assets+=("$archive" "$checksum")
           done
-          for package in libspd1 libspd-dev; do
-            archive="${package}_${DEBIAN_VERSION}_amd64.deb"
-            checksum="$archive.sha256"
-            test -f "$archive"
-            test -f "$checksum"
-            expected_checksum="$(sha256sum "$archive")"
-            actual_checksum="$(cat "$checksum")"
-            test "$actual_checksum" = "$expected_checksum"
-            assets+=("$archive" "$checksum")
+          for architecture in amd64 arm64; do
+            for package in libspd1 libspd-dev; do
+              archive="${package}_${DEBIAN_VERSION}_${architecture}.deb"
+              checksum="$archive.sha256"
+              test -f "$archive"
+              test -f "$checksum"
+              expected_checksum="$(sha256sum "$archive")"
+              actual_checksum="$(cat "$checksum")"
+              test "$actual_checksum" = "$expected_checksum"
+              assets+=("$archive" "$checksum")
+            done
           done
           options=(--draft --verify-tag --title "$RELEASE_TAG")
           if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then
             options+=(--prerelease)
           fi
-          notes="ZIP packages include the C header, static and shared libraries, and C/C++ examples. Native archives passed extracted-package consumer checks on their matching runners; the MinGW Windows archive passed cross-compiled C/C++ consumers under Wine. Debian 12 amd64 packages provide the libspd1 runtime and libspd-dev development files; extracted and apt-installed C/C++ consumers passed in Debian Bookworm. SHA256 sidecars are attached. No APT repository or package signing is provided.
+          notes="ZIP packages include the C header, static and shared libraries, and C/C++ examples. Native archives passed extracted-package consumer checks on their matching runners; the MinGW Windows archive passed cross-compiled C/C++ consumers under Wine. The Linux ARM64 archive and Debian 12 arm64 packages passed cross-compiled consumers under QEMU, not native ARM64 hardware. Debian 12 amd64 and arm64 packages provide the libspd1 runtime and libspd-dev development files; extracted and apt-installed C/C++ consumers passed in Debian Bookworm. SHA256 sidecars are attached. No APT repository or package signing is provided.
 
           Automated by MisterMal"
           # Existing releases fail rather than being modified or overwritten.
@@ -230,10 +241,15 @@ jobs:
               raise RuntimeError("release tag must match the Cargo version")
           names = [
               f"libspd-{version}-{target}.zip"
-              for target in ("x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu")
+              for target in (
+                  "x86_64-unknown-linux-gnu",
+                  "aarch64-unknown-linux-gnu",
+                  "x86_64-pc-windows-gnu",
+              )
           ]
           names += [
-              f'{package}_{os.environ["DEBIAN_VERSION"]}_amd64.deb'
+              f'{package}_{os.environ["DEBIAN_VERSION"]}_{architecture}.deb'
+              for architecture in ("amd64", "arm64")
               for package in ("libspd1", "libspd-dev")
           ]
           assets = []
@@ -274,8 +290,9 @@ jobs:
                       break
                   page += 1
           notes = (
-              "Linux and MinGW Windows ZIPs and Debian amd64 packages. "
+              "Linux x64/ARM64 and MinGW Windows ZIPs and Debian amd64/arm64 packages. "
               "Extracted-package consumers passed; Windows consumers ran under Wine. "
+              "ARM64 consumers ran under QEMU, not native ARM64 hardware. "
               "Debian packages also passed installed-consumer checks. "
               "SHA256 sidecars are attached.\n\nAutomated by MisterMal"
           )

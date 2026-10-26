@@ -43,6 +43,10 @@ runs:
     - name: Cross-build Windows ZIP and run extracted consumers under Wine
       shell: bash
       run: python3 scripts/mingw.py package
+    - name: Cross-build ARM64 ZIP and Debian packages and run QEMU consumers
+      uses: ./.github/actions/arm64-packages
+      with:
+        version: ${{ inputs.version }}
     - name: Upload verified Gitea packages and checksums
       uses: ChristopherHX/gitea-upload-artifact@v4
       with:

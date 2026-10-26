@@ -70,6 +70,14 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
 
+  arm64:
+    name: Linux ARM64 cross-packages
+    if: github.server_url == 'https://github.com'
+    needs: version
+    uses: ./.github/workflows/arm64.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
   gitea_packages:
     name: Gitea packages
     if: github.server_url != 'https://github.com'

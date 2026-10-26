@@ -1,24 +1,27 @@
 # Native binary releases
 
-Version-tag workflows prepare maintainer-reviewed **draft** releases on both [Gitea](https://gitnet.teske.zip/TeskesLabOrg/libspd/releases) and [GitHub](https://github.com/TeskesLab/libspd/releases). Both forges build Linux and cross-compiled Windows GNU ZIPs plus Debian runtime/development packages. GitHub also builds native Windows MSVC and both macOS architectures. These workflows do not publish Rust crates to crates.io or provide hardware drivers.
+Version-tag workflows prepare maintainer-reviewed **draft** releases on both [Gitea](https://gitnet.teske.zip/TeskesLabOrg/libspd/releases) and [GitHub](https://github.com/TeskesLab/libspd/releases). Both forges build Linux x64, cross-compiled Linux ARM64, and cross-compiled Windows GNU ZIPs plus Debian amd64/arm64 runtime/development packages. GitHub also builds native Windows MSVC and both macOS architectures. These workflows do not publish Rust crates to crates.io or provide hardware drivers.
 
 ## Build targets
 
-Native jobs build on their target OS and compile/run C and C++ consumers against an **unpacked ZIP**, not just the build directory. The Windows GNU job instead cross-compiles on Linux and runs extracted Windows consumers under Wine.
+Native jobs build on their target OS and compile/run C and C++ consumers against an **unpacked ZIP**, not just the build directory. The Windows GNU job instead cross-compiles on Linux and runs extracted Windows consumers under Wine. The Linux ARM64 job cross-compiles with the GNU AArch64 toolchain in Debian 12 and executes extracted C static and C++ shared consumers explicitly through `qemu-aarch64`.
 
 | Rust target / archive suffix | GitHub build environment | Gitea build environment | Shared library | Other libraries |
 |---|---|---|---|---|
 | `x86_64-unknown-linux-gnu` | Ubuntu 22.04 | Debian 12 container | `libspd.so` | `libspd.a` |
+| `aarch64-unknown-linux-gnu` | Debian 12 container, GNU cross-tools/QEMU | Debian 12 container, GNU cross-tools/QEMU | `libspd.so` | `libspd.a` |
 | `x86_64-pc-windows-gnu` | Debian 12 container, MinGW/Wine | Debian 12 container, MinGW/Wine | `spd.dll` | `libspd.dll.a` import library; `libspd.a` static library |
 | `x86_64-pc-windows-msvc` | Windows 2022, MSVC x64 | Not built | `spd.dll` | `spd.dll.lib` import library; `spd.lib` static library |
 | `x86_64-apple-darwin` | macOS 15 Intel | Not built | `libspd.dylib` | `libspd.a` |
 | `aarch64-apple-darwin` | macOS 15 ARM64 | Not built | `libspd.dylib` | `libspd.a` |
 
-These are selected build/CI targets, not a promise of compatibility with every OS release. The GitHub Linux ZIP retains the Ubuntu 22.04 glibc/toolchain baseline; the Gitea Linux ZIP uses Debian 12's baseline. The same Linux asset name therefore does **not** imply identical binaries across forges. No musl or universal-old-glibc binary is implied. macOS Intel and ARM64 archives are separate, not a universal binary. Platform runtime requirements remain those of the selected Rust/linker environment.
+These are selected build/CI targets, not a promise of compatibility with every OS release. The GitHub x64 Linux ZIP retains the Ubuntu 22.04 glibc/toolchain baseline; the Gitea x64 Linux ZIP uses Debian 12's baseline. The same x64 Linux asset name therefore does **not** imply identical binaries across forges. Linux ARM64 ZIPs use the Debian 12 GNU/glibc baseline on both forges. No musl or universal-old-glibc binary is implied. macOS Intel and ARM64 archives are separate, not a universal binary. Platform runtime requirements remain those of the selected Rust/linker environment.
 
 **Windows toolchain choice:** the GNU ZIP uses MinGW import/static libraries for GNU-toolchain consumers and avoids needing a Windows build worker. It is separate from the MSVC ZIP, which is built and executed on a native Windows runner and is intended for MSVC consumers; do not interchange their static/import libraries. Wine verifies the cross-built C/C++ examples, not every real Windows version, Windows loader behavior, or MSVC compatibility.
 
 **Windows naming:** the FFI crate's library name is `spd`, so Cargo produces `spd.dll`. Keep it beside its matching import library. Renaming only the DLL to `libspd.dll` breaks the import library's embedded runtime name; the release flow preserves Cargo's names deliberately.
+
+**Linux ARM64 validation:** ARM64 builds use Rust stable's `aarch64-unknown-linux-gnu` target, `aarch64-linux-gnu-gcc`/`g++`, and Debian multiarch libraries. QEMU user-mode executes the cross-built consumers; it is not native ARM64 hardware, a full ARM64 OS boot, or hardware/SPD validation. No host `binfmt_misc` registration or privileged emulator setup is required.
 
 ## Package contents
 
@@ -32,20 +35,22 @@ Each asset is named `libspd-VERSION-TARGET.zip`, with a matching `.zip.sha256` s
 
 The package is for native consumers; Rust applications normally depend on the `libspd` crate/source instead of loading the C ABI. No programmer executable, firmware, credentials, or real-module SPD dump is included. A checksum detects accidental download changes; a checksum sidecar alone is not a cryptographic provenance/signature guarantee.
 
-## Debian 12 amd64 packages
+## Debian 12 amd64 and arm64 packages
 
-Debian packages build natively in the Debian 12-based `node:22-bookworm-slim` image on both forges: in a reusable GitHub job and in Gitea's direct packaging job. Node is required for JavaScript actions on Gitea, whose runner does not inject it into custom containers. The package baseline is **Debian 12 (Bookworm), amd64**; it is not a promise of compatibility with older Debian releases, other distributions, or other architectures. ZIP packaging remains separate.
+Debian packages build in the Debian 12-based `node:22-bookworm-slim` image on both forges: amd64 builds natively, while arm64 uses GNU cross-compilers and QEMU. GitHub uses reusable jobs; Gitea uses a direct packaging job and shared local composite actions. Node is required for JavaScript actions on Gitea, whose runner does not inject it into custom containers. The package baseline is **Debian 12 (Bookworm), amd64 or arm64**; it is not a promise of compatibility with older Debian releases, other distributions, or other architectures. ZIP packaging remains separate.
 
 Each release adds these assets and their individual `.deb.sha256` sidecars:
 
-- `libspd1_DEBIANVERSION_amd64.deb`: runtime shared library with ABI SONAME `libspd.so.1`.
-- `libspd-dev_DEBIANVERSION_amd64.deb`: `libspd.h`, static library, unversioned shared-library linker link, and `libspd.pc`; depends on the exact matching `libspd1` version.
+- `libspd1_DEBIANVERSION_ARCH.deb`: runtime shared library with ABI SONAME `libspd.so.1`.
+- `libspd-dev_DEBIANVERSION_ARCH.deb`: `libspd.h`, static library, unversioned shared-library linker link, and `libspd.pc`; depends on the exact matching `libspd1` version. `ARCH` is `amd64` or `arm64`.
 
 The runtime package name and SONAME track C ABI version 1. An incompatible ABI change requires a new ABI version, SONAME, and runtime package name together.
 
-Packages use the `/usr` prefix: the header is `/usr/include/libspd.h`, libraries are in `/usr/lib/x86_64-linux-gnu/`, and pkg-config metadata is `/usr/lib/x86_64-linux-gnu/pkgconfig/libspd.pc`. Use `pkg-config --cflags --libs libspd` for shared consumers. `pkg-config --cflags --libs --static libspd` also supplies the static library's system dependencies, but does not force static linking: link `/usr/lib/x86_64-linux-gnu/libspd.a` explicitly, as the installed smoke check does.
+Packages use the `/usr` prefix: the header is `/usr/include/libspd.h`, libraries are in `/usr/lib/x86_64-linux-gnu/` (amd64) or `/usr/lib/aarch64-linux-gnu/` (arm64), and each library directory contains `pkgconfig/libspd.pc`. Both package architectures are multiarch-coinstallable at the same version. Use `pkg-config --cflags --libs libspd` for native shared consumers. For cross-compilation, select ARM64 metadata with `PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig`. `pkg-config --cflags --libs --static libspd` also supplies the static library's system dependencies, but does not force static linking: link the architecture's `libspd.a` explicitly, as the installed smoke check does.
 
 Cargo SemVer is validated against both manifests before conversion: `MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` becomes `MAJOR.MINOR.PATCH[~PRERELEASE][+BUILD]-1`. For example, `1.2.3` maps to `1.2.3-1`, and `1.2.3-rc.1+build.7` maps to `1.2.3~rc.1+build.7-1`. The Debian revision is fixed at `1`; the Git tag remains the original Cargo version with its `v` prefix.
+
+Debian changelog dates use `SOURCE_DATE_EPOCH` when set, otherwise the source Git commit's Unix timestamp. Builds from source archives without Git metadata must set `SOURCE_DATE_EPOCH` to that timestamp. Use the same source and timestamp for both architectures: common headers and documentation, including the compressed changelog, must be byte-identical for multiarch coinstallation.
 
 Verify the downloaded sidecars, then install both matching local files (replace the example version):
 
@@ -55,7 +60,7 @@ sha256sum -c libspd-dev_0.0.2-1_amd64.deb.sha256
 sudo apt-get install --no-install-recommends ./libspd1_0.0.2-1_amd64.deb ./libspd-dev_0.0.2-1_amd64.deb
 ```
 
-For local packaging in a Debian 12 amd64 checkout, install `ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils` and Rust stable, then run:
+For native local packaging in a Debian 12 amd64 checkout, install `ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils` and Rust stable, then run:
 
 ```sh
 python3 scripts/debian.py version
@@ -64,31 +69,35 @@ python3 scripts/debian.py package
 python3 scripts/debian.py smoke
 ```
 
-Packaging writes both `.deb` files and sidecars to `target/dist/` and tests consumers against extracted packages. Both the reusable GitHub job and Gitea's composite packaging action additionally install both packages with `apt-get --no-install-recommends`, then check installed pkg-config metadata, headers, static/shared C and C++ consumers, and runtime loader discovery without loader-path overrides. The installed smoke command requires the matching packages and a source checkout: it uses the checkout's synthetic examples against installed headers/libraries, because minimal Debian images can omit documentation files during installation.
+Packaging writes both `.deb` files and sidecars to `target/dist/` and tests consumers against extracted packages. Both forges additionally install both packages of each built architecture with `apt-get --no-install-recommends`, then check installed pkg-config metadata, headers, static/shared C and C++ consumers, and runtime loader discovery without loader-path overrides. ARM64 consumers execute explicitly under `qemu-aarch64 -L /` using the installed foreign libraries; amd64 consumers run natively. Gitea installs arm64 alongside its already installed amd64 packages, exercising multiarch coinstallation. The installed smoke command requires the matching packages and a source checkout: it uses the checkout's synthetic examples against installed headers/libraries, because minimal Debian images can omit documentation files during installation. The default architecture for `package` and `smoke` remains `amd64`; `version` has no architecture option.
 
 These are downloadable binary packages, **not an APT repository**: no repository metadata, package signing, automatic public release, or automatic installation is provided. SHA-256 sidecars detect corruption, not publisher authenticity. Release automation stops at a maintainer-reviewed draft on the corresponding forge.
 
 
 ## CI and release triggers
 
-- `ci.yml`: push/pull-request Linux MSRV 1.81 and stable quality checks, version validation, native ZIPs, Windows GNU cross-packaging, and Debian packaging on both forges.
+- `ci.yml`: push/pull-request Linux MSRV 1.81 and stable quality checks, version validation, native ZIPs, Windows GNU and Linux ARM64 cross-packaging, and Debian packaging on both forges.
 - On GitHub, both `ci.yml` and `release.yml` call the reusable packaging workflows below. Their package jobs are guarded to run only on GitHub.
   - `native.yml`: static four-target matrix on Ubuntu 22.04, Windows 2022/MSVC, macOS 15 Intel, and macOS 15 ARM64, using Python 3.11 and native C/C++ consumer execution.
   - `mingw.yml`: Debian 12 amd64 cross-build using Rust stable's `x86_64-pc-windows-gnu` target, MinGW C/C++ compilers, and Wine; uploads the ZIP and sidecar as `libspd-mingw-windows-gnu`.
   - `debian.yml`: Debian 12 amd64 build, extracted-consumer tests, apt installation, and installed-consumer tests; uploads the two packages and sidecars as `libspd-debian-amd64`.
-- On Gitea, both parent workflows use a direct top-level packaging job in `node:22-bookworm-slim`, not a nested reusable workflow. After installing Git/TLS support and checking out the source without persisted credentials, the job calls the local composite action `.github/actions/gitea-packages/action.yml` with the validated version. This action shares the Linux ZIP, Debian package/install-smoke, and MinGW/Wine packaging steps between CI and release, using system Python 3.11 and Rust stable. It uploads all eight package/checksum files together as `libspd-gitea-packages`.
+  - `arm64.yml`: Debian 12 amd64-to-arm64 GNU cross-build, using `.github/actions/arm64-packages/action.yml` for ZIP/Debian packaging, extracted QEMU consumers, apt installation, and installed QEMU consumers. Uploads the ARM64 ZIP, both arm64 Debian packages, and their sidecars as the six-file `libspd-arm64-packages` artifact.
+- On Gitea, both parent workflows use a direct top-level packaging job in `node:22-bookworm-slim`, not a nested reusable workflow. After installing Git/TLS support and checking out the source without persisted credentials, the job calls the local composite action `.github/actions/gitea-packages/action.yml` with the validated version. This action shares the Linux x64 ZIP, amd64 Debian package/install-smoke, and MinGW/Wine packaging steps between CI and release, using system Python 3.11 and Rust stable. It retains the eight-file `libspd-gitea-packages` artifact and also invokes the same ARM64 composite used by GitHub to produce the separate six-file `libspd-arm64-packages` artifact. Publishers merge `libspd-*` artifacts and attach only their exact expected names.
 - `release.yml`: version-tag pushes and manual dispatch on both forges. Manual dispatch builds downloadable workflow artifacts only; it does not create a release.
 - A matching `vVERSION` tag creates a **draft** release on the corresponding forge after all its packaging/consumer jobs and both Linux quality/MSRV jobs succeed. No tag is created by the workflow. The root and FFI package versions must match, and the tag must match that exact version.
 - Release write permission is limited to the draft-release job in the canonical repositories (`TeskesLab/libspd` on GitHub and `TeskesLabOrg/libspd` on Gitea). Build jobs use read-only repository access. No release API is invoked from untrusted pull-request builds. The privileged job does not execute downloaded code: it validates the exact expected package names and checksums before attaching an explicit asset list.
 
 ### Exact release asset sets
 
-For version `0.0.2`, **both** forges attach these four package assets:
+For version `0.0.2`, **both** forges attach these seven package assets:
 
 - `libspd-0.0.2-x86_64-unknown-linux-gnu.zip`
+- `libspd-0.0.2-aarch64-unknown-linux-gnu.zip`
 - `libspd-0.0.2-x86_64-pc-windows-gnu.zip`
 - `libspd1_0.0.2-1_amd64.deb`
 - `libspd-dev_0.0.2-1_amd64.deb`
+- `libspd1_0.0.2-1_arm64.deb`
+- `libspd-dev_0.0.2-1_arm64.deb`
 
 GitHub additionally attaches these three package assets:
 
@@ -96,7 +105,7 @@ GitHub additionally attaches these three package assets:
 - `libspd-0.0.2-x86_64-apple-darwin.zip`
 - `libspd-0.0.2-aarch64-apple-darwin.zip`
 
-Every package asset has its own same-name `.sha256` sidecar. Gitea therefore has **two ZIPs, two Debian packages, and four checksum files (8 assets)**. GitHub has **five ZIPs, two Debian packages, and seven checksum files (14 assets)**.
+Every package asset has its own same-name `.sha256` sidecar. Gitea therefore has **three ZIPs, four Debian packages, and seven checksum files (14 assets)**. GitHub has **six ZIPs, four Debian packages, and ten checksum files (20 assets)**. These filenames use the unchanged `0.0.2` manifest version; adding ARM64 support does not itself bump the version, create/replace a tag, or publish a release.
 
 Draft creation is a remote publication action; a maintainer must authorize pushing the version tag and triggering release preparation, then inspect assets/notes before separately making the draft public. Existing releases are not silently overwritten; resolve an existing draft deliberately before rerunning a failed publication job.
 
@@ -116,6 +125,38 @@ Use the matching native target from the table on Windows/macOS. `scripts/release
 
 The native package command builds the FFI crate, collects exact required files, writes the archive/checksum, extracts into a temporary directory, compiles the included C/C++ programs using the extracted header/libraries, and runs them. Consumer failures make the command fail; no hardware test is implied.
 
+### Linux ARM64 cross-packaging and coinstallation
+
+In a Debian 12 amd64 environment, install the foreign runtime/development libraries through Debian multiarch, not by relying only on the cross-compiler's sysroot:
+
+```sh
+sudo dpkg --add-architecture arm64
+sudo apt-get update
+sudo apt-get install --no-install-recommends \
+  ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils \
+  gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user \
+  libc6-dev:arm64 libgcc-s1:arm64 libstdc++6:arm64
+rustup target add aarch64-unknown-linux-gnu
+python3 scripts/arm64.py package
+python3 scripts/debian.py package --architecture arm64
+```
+
+The ZIP command writes `target/dist/libspd-0.0.2-aarch64-unknown-linux-gnu.zip` and its `.sha256` sidecar, using the validated manifest version. It extracts the package, cross-compiles the C static and C++ shared consumers, and runs them with explicit `qemu-aarch64` invocation. Consumer failures fail packaging; a successful cross-build alone is insufficient.
+
+To install and check the arm64 Debian packages, optionally alongside the matching amd64 packages shown above:
+
+```sh
+(cd target/dist && sha256sum -c \
+  libspd1_0.0.2-1_arm64.deb.sha256 \
+  libspd-dev_0.0.2-1_arm64.deb.sha256)
+sudo apt-get install --no-install-recommends \
+  ./target/dist/libspd1_0.0.2-1_arm64.deb \
+  ./target/dist/libspd-dev_0.0.2-1_arm64.deb
+python3 scripts/debian.py smoke --architecture arm64
+```
+
+Installed ARM64 smoke uses architecture-specific pkg-config metadata and explicit `qemu-aarch64 -L /` with Debian's foreign dynamic loader and libraries. No host binfmt setup is needed.
+
 ### Windows GNU cross-packaging
 
 In a Debian 12 amd64 environment, install `ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64 wine wine64` and Rust stable, then run:
@@ -131,7 +172,7 @@ For a downloaded package, verify its SHA-256 using your platform's checksum tool
 
 ## Validation boundary
 
-Local execution proves only the package and consumer paths actually exercised. Debian installed-package validation requires the Debian 12 amd64 environment; Windows GNU smoke checks require MinGW and Wine; native Windows MSVC and macOS paths require their actual native matrix jobs. Configuration alone is not evidence those jobs have run. Workflows must be pushed to the respective forge and executed before claiming remote release validation. None of the smoke programs establishes DIMM compatibility or permission to program real hardware.
+Local execution proves only the package and consumer paths actually exercised. Debian installed-package validation requires Debian 12 with the matching native or multiarch packages; Linux ARM64 checks require GNU AArch64 cross-tools, foreign runtime libraries, and QEMU; Windows GNU smoke checks require MinGW and Wine; native Windows MSVC and macOS paths require their actual native matrix jobs. QEMU/Wine checks do not establish native ARM64/Windows hardware or OS compatibility. Configuration alone is not evidence those jobs have run. Workflows must be pushed to the respective forge and executed before claiming remote release validation. None of the smoke programs establishes DIMM compatibility or permission to program real hardware.
 
 ## Platform documentation
 

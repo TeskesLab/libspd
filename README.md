@@ -65,14 +65,15 @@ Build with `cargo build -p libspd-ffi --release`, include
 The [native release flow](docs/releases.md) prepares draft releases on both
 [Gitea](https://gitnet.teske.zip/TeskesLabOrg/libspd/releases) and
 [GitHub](https://github.com/TeskesLab/libspd/releases). Both provide Linux x64
-and cross-compiled Windows x64/MinGW ZIPs plus Debian 12 amd64 `libspd1` runtime
-and `libspd-dev` development packages. GitHub additionally provides native
-Windows x64/MSVC and macOS x64/ARM64 ZIPs. MinGW consumers run under Wine during
-packaging; this is not a substitute for native Windows/MSVC validation.
+and cross-compiled Linux ARM64 and Windows x64/MinGW ZIPs plus Debian 12 amd64
+and arm64 `libspd1` runtime and `libspd-dev` development packages. GitHub
+additionally provides native Windows x64/MSVC and macOS x64/ARM64 ZIPs.
+ARM64 C/C++ consumers run under QEMU and MinGW consumers under Wine during
+packaging; neither substitutes for native platform/hardware validation.
 GitHub uses reusable packaging workflows with a four-target native matrix;
-Gitea uses a direct Debian-container job and a local composite action shared
-by CI and release. Including SHA-256 sidecars, Gitea's draft has 8 assets and
-GitHub's has 14.
+Gitea uses a direct Debian-container job and local composite actions shared
+by CI and release. Including SHA-256 sidecars, Gitea's draft has 14 assets and
+GitHub's has 20.
 No APT repository, package signing, or automatic public/crates.io publishing is provided.
 
 The [FFI guide](docs/ffi.md) includes complete examples, linking commands,
