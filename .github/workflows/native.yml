@@ -15,7 +15,7 @@ jobs:
   targets:
     name: Select forge build targets
     runs-on: ubuntu-22.04
-    container: debian:bookworm-slim
+    container: node:22-bookworm-slim
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
@@ -28,7 +28,7 @@ jobs:
           if [ "$SERVER_URL" = "https://github.com" ]; then
             matrix='{"include":[{"runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","container":"","python":"python"},{"runner":"windows-2022","target":"x86_64-pc-windows-msvc","container":"","python":"python"},{"runner":"macos-15-intel","target":"x86_64-apple-darwin","container":"","python":"python"},{"runner":"macos-15","target":"aarch64-apple-darwin","container":"","python":"python"}]}'
           else
-            matrix='{"include":[{"runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","container":"debian:bookworm-slim","python":"python3"}]}'
+            matrix='{"include":[{"runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","container":"node:22-bookworm-slim","python":"python3"}]}'
           fi
           printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 

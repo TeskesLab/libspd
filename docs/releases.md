@@ -34,7 +34,7 @@ The package is for native consumers; Rust applications normally depend on the `l
 
 ## Debian 12 amd64 packages
 
-The separate Debian release train builds natively in `debian:bookworm-slim` on both forges. Its baseline is **Debian 12 (Bookworm), amd64**; it is not a promise of compatibility with older Debian releases, other distributions, or other architectures. ZIP packaging remains separate.
+The separate Debian release train builds natively in the Debian 12-based `node:22-bookworm-slim` image on both forges. Node is required for JavaScript actions on Gitea, whose runner does not inject it into custom containers. The package baseline is **Debian 12 (Bookworm), amd64**; it is not a promise of compatibility with older Debian releases, other distributions, or other architectures. ZIP packaging remains separate.
 
 Each release adds these assets and their individual `.deb.sha256` sidecars:
 
@@ -50,9 +50,9 @@ Cargo SemVer is validated against both manifests before conversion: `MAJOR.MINOR
 Verify the downloaded sidecars, then install both matching local files (replace the example version):
 
 ```sh
-sha256sum -c libspd1_0.0.1-1_amd64.deb.sha256
-sha256sum -c libspd-dev_0.0.1-1_amd64.deb.sha256
-sudo apt-get install --no-install-recommends ./libspd1_0.0.1-1_amd64.deb ./libspd-dev_0.0.1-1_amd64.deb
+sha256sum -c libspd1_0.0.2-1_amd64.deb.sha256
+sha256sum -c libspd-dev_0.0.2-1_amd64.deb.sha256
+sudo apt-get install --no-install-recommends ./libspd1_0.0.2-1_amd64.deb ./libspd-dev_0.0.2-1_amd64.deb
 ```
 
 For local packaging in a Debian 12 amd64 checkout, install `ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils` and Rust stable, then run:
@@ -81,18 +81,18 @@ These are downloadable binary packages, **not an APT repository**: no repository
 
 ### Exact release asset sets
 
-For version `0.0.1`, **both** forges attach these four package assets:
+For version `0.0.2`, **both** forges attach these four package assets:
 
-- `libspd-0.0.1-x86_64-unknown-linux-gnu.zip`
-- `libspd-0.0.1-x86_64-pc-windows-gnu.zip`
-- `libspd1_0.0.1-1_amd64.deb`
-- `libspd-dev_0.0.1-1_amd64.deb`
+- `libspd-0.0.2-x86_64-unknown-linux-gnu.zip`
+- `libspd-0.0.2-x86_64-pc-windows-gnu.zip`
+- `libspd1_0.0.2-1_amd64.deb`
+- `libspd-dev_0.0.2-1_amd64.deb`
 
 GitHub additionally attaches these three package assets:
 
-- `libspd-0.0.1-x86_64-pc-windows-msvc.zip`
-- `libspd-0.0.1-x86_64-apple-darwin.zip`
-- `libspd-0.0.1-aarch64-apple-darwin.zip`
+- `libspd-0.0.2-x86_64-pc-windows-msvc.zip`
+- `libspd-0.0.2-x86_64-apple-darwin.zip`
+- `libspd-0.0.2-aarch64-apple-darwin.zip`
 
 Every package asset has its own same-name `.sha256` sidecar. Gitea therefore has **two ZIPs, two Debian packages, and four checksum files (8 assets)**. GitHub has **five ZIPs, two Debian packages, and seven checksum files (14 assets)**.
 
@@ -106,7 +106,7 @@ Requires Python 3.11+, Cargo/Rust stable, and native C/C++ development tools for
 
 ```sh
 python scripts/release.py version
-python scripts/release.py version --tag v0.0.1
+python scripts/release.py version --tag v0.0.2
 python scripts/release.py package --target x86_64-unknown-linux-gnu
 ```
 
@@ -123,7 +123,7 @@ rustup target add x86_64-pc-windows-gnu
 python3 scripts/mingw.py package
 ```
 
-The separate cross-package command writes `target/dist/libspd-0.0.1-x86_64-pc-windows-gnu.zip` and its `.sha256` sidecar (using the validated manifest version). It extracts the archive, compiles Windows C and C++ consumers against the extracted headers and shared/static libraries, and executes those consumers with Wine. A successful Linux cross-build alone is not sufficient: consumer execution failures fail packaging.
+The separate cross-package command writes `target/dist/libspd-0.0.2-x86_64-pc-windows-gnu.zip` and its `.sha256` sidecar (using the validated manifest version). It extracts the archive, compiles Windows C and C++ consumers against the extracted headers and shared/static libraries, and executes those consumers with Wine. A successful Linux cross-build alone is not sufficient: consumer execution failures fail packaging.
 
 For a downloaded package, verify its SHA-256 using your platform's checksum tool, unpack it, add its `include/` to your include paths and its `lib/` to linker paths. See [the FFI guide](ffi.md) for ownership and function contracts, and [build instructions](build.md) for source-checkout examples. Shared-library deployments must make the matching library discoverable to the OS loader. Static linking can require target-specific Rust system libraries; inspect linker diagnostics rather than copying Linux link flags to Windows/macOS.
 

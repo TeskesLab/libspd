@@ -1,6 +1,6 @@
 [package]
 name = "libspd-ffi"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 rust-version = "1.81"
 license = "Apache-2.0"
@@ -16,4 +16,4 @@ name = "spd"
 crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
-libspd = { version = "0.0.1", path = ".." }
+libspd = { version = "0.0.2", path = ".." }

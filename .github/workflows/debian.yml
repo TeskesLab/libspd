@@ -15,7 +15,7 @@ jobs:
   package:
     name: Debian 12 amd64
     runs-on: ubuntu-22.04
-    container: debian:bookworm-slim
+    container: node:22-bookworm-slim
     defaults:
       run:
         shell: bash

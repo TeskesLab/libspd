@@ -28,7 +28,7 @@ jobs:
   version:
     name: Validate package version
     runs-on: ubuntu-22.04
-    container: debian:bookworm-slim
+    container: node:22-bookworm-slim
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
