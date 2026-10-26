@@ -81,6 +81,8 @@ Cargo SemVer is validated against both manifests before conversion: `MAJOR.MINOR
 
 Debian changelog dates use `SOURCE_DATE_EPOCH` when set, otherwise the source Git commit's Unix timestamp. Builds from source archives without Git metadata must set `SOURCE_DATE_EPOCH` to that timestamp. Use the same source and timestamp for both architectures: common headers and documentation, including the compressed changelog, must be byte-identical for multiarch coinstallation.
 
+For container checkouts owned by another UID, the timestamp lookup trusts only the selected source directory through a command-scoped Git `safe.directory` setting. It does not change global Git configuration or trust all repositories.
+
 Verify the downloaded sidecars, then install both matching local files (replace the example version):
 
 ```sh

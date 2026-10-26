@@ -67,8 +67,11 @@ def source_date_epoch(env):
                 "SOURCE_DATE_EPOCH is required when packaging a source archive without Git metadata; "
                 "set it to the source commit's Unix timestamp"
             )
+        # CI containers can run under a different UID than checkout's owner.
+        # Trust only this explicitly selected source tree for this Git command.
         value = release.run(
-            [release.executable("git"), "log", "-1", "--format=%ct", "HEAD"],
+            [release.executable("git"), "-c", f"safe.directory={release.ROOT}",
+             "log", "-1", "--format=%ct", "HEAD"],
             cwd=release.ROOT, env=env, capture=True,
         ).strip()
     if re.fullmatch(r"[0-9]+", value) is None:
