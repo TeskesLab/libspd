@@ -12,6 +12,7 @@ permissions:
 jobs:
   version:
     name: Validate release version
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -35,6 +36,7 @@ jobs:
 
   check:
     name: Release quality / Rust ${{ matrix.toolchain }}
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false

@@ -31,15 +31,15 @@ The package is for native consumers; Rust applications normally depend on the `l
 
 ## CI and release triggers
 
-- `ci.yml`: push/pull-request checks, Linux MSRV 1.81 and stable verification, and the native ZIP build matrix.
-- `native.yml`: shared matrix implementation called by CI and the release workflow, avoiding separate packaging implementations.
-- `release.yml`: version-tag pushes and manual dispatch. Manual dispatch builds downloadable workflow artifacts only; it does not create a release.
+- `ci.yml`: push/pull-request Linux MSRV 1.81 and stable checks on GitHub and Gitea; the native ZIP build matrix runs on GitHub only.
+- `native.yml`: GitHub-only shared matrix called by CI and the release workflow, avoiding separate packaging implementations.
+- `release.yml`: GitHub-only version-tag pushes and manual dispatch. Manual dispatch builds downloadable workflow artifacts only; it does not create a release.
 - A matching `vVERSION` tag creates a **draft** GitHub release after all native packaging/consumer jobs and both Linux quality/MSRV jobs succeed. No tag is created by the workflow. The root and FFI package versions must match, and the tag must match that exact version.
 - Release write permission is limited to the draft-release job in the canonical GitHub repository. Build jobs use read-only repository access. No release API is invoked from untrusted pull-request builds.
 
 Draft creation is still a remote publication action. This task only adds configuration: it does not push a tag, invoke a workflow, create a release, or publish a crate. Maintainers must explicitly authorize those actions when performing a release. A draft lets a maintainer inspect assets/notes before separately making it public. Existing releases are not silently overwritten; resolve an existing draft deliberately before rerunning a failed publication job.
 
-The old `.gitea/workflows/ci.yml` is replaced rather than kept as a second active pipeline. Some Gitea/Forgejo configurations recognize GitHub workflow layouts, but hosted-runner labels, reusable workflows, `GITHUB_TOKEN`, `gh`, and artifact actions are GitHub-specific integrations here. Do not assume this release workflow is portable to Gitea without adapting those services.
+The old `.gitea/workflows/ci.yml` is replaced rather than kept as a second active pipeline. Gitea 1.27 recognizes the `.github/workflows` layout and runs the shared Rust/C/C++ quality checks. Explicit job guards keep native packaging and release preparation on GitHub: GitHub-hosted Windows/macOS runners, artifact services, and release authentication are not assumed to exist on Gitea. This is not a full native-release port to Gitea.
 
 ## Local packaging and consumption
 
