@@ -12,50 +12,30 @@ permissions:
   contents: read
 
 jobs:
-  targets:
-    name: Select forge build targets
-    runs-on: ubuntu-22.04
-    container: node:22-bookworm-slim
-    outputs:
-      matrix: ${{ steps.targets.outputs.matrix }}
-    steps:
-      - name: Select native runners and Python
-        id: targets
-        shell: bash
-        env:
-          SERVER_URL: ${{ github.server_url }}
-        run: |
-          if [ "$SERVER_URL" = "https://github.com" ]; then
-            matrix='{"include":[{"runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","container":"","python":"python"},{"runner":"windows-2022","target":"x86_64-pc-windows-msvc","container":"","python":"python"},{"runner":"macos-15-intel","target":"x86_64-apple-darwin","container":"","python":"python"},{"runner":"macos-15","target":"aarch64-apple-darwin","container":"","python":"python"}]}'
-          else
-            matrix='{"include":[{"runner":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","container":"node:22-bookworm-slim","python":"python3"}]}'
-          fi
-          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
-
   package:
     name: ${{ matrix.target }}
-    needs: targets
+    if: github.server_url == 'https://github.com'
     runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
-    env:
-      PACKAGE_PYTHON: ${{ matrix.python }}
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
     defaults:
       run:
         shell: bash
     steps:
-      - name: Install Gitea Linux build and consumer tools
-        if: github.server_url != 'https://github.com'
-        run: |
-          apt-get update
-          apt-get install --no-install-recommends -y ca-certificates curl git build-essential python3 pkg-config binutils xz-utils
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
-        if: github.server_url == 'https://github.com'
         with:
           python-version: "3.11"
       - uses: dtolnay/rust-toolchain@stable
@@ -70,24 +50,14 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ inputs.version }}
         run: |
-          version="$("$PACKAGE_PYTHON" scripts/release.py version)"
+          version="$(python scripts/release.py version)"
           test "$version" = "$EXPECTED_VERSION"
       - name: Build ZIP and test extracted C/C++ consumers
         env:
           PACKAGE_TARGET: ${{ matrix.target }}
-        run: '"$PACKAGE_PYTHON" scripts/release.py package --target "$PACKAGE_TARGET"'
+        run: python scripts/release.py package --target "$PACKAGE_TARGET"
       - name: Upload verified native package and SHA256
-        if: github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
-        with:
-          name: libspd-${{ matrix.target }}
-          path: |
-            target/dist/libspd-${{ inputs.version }}-${{ matrix.target }}.zip
-            target/dist/libspd-${{ inputs.version }}-${{ matrix.target }}.zip.sha256
-          if-no-files-found: error
-      - name: Upload verified native package and SHA256 to Gitea
-        if: github.server_url != 'https://github.com'
-        uses: ChristopherHX/gitea-upload-artifact@v4
         with:
           name: libspd-${{ matrix.target }}
           path: |

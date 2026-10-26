@@ -69,6 +69,10 @@ and cross-compiled Windows x64/MinGW ZIPs plus Debian 12 amd64 `libspd1` runtime
 and `libspd-dev` development packages. GitHub additionally provides native
 Windows x64/MSVC and macOS x64/ARM64 ZIPs. MinGW consumers run under Wine during
 packaging; this is not a substitute for native Windows/MSVC validation.
+GitHub uses reusable packaging workflows with a four-target native matrix;
+Gitea uses a direct Debian-container job and a local composite action shared
+by CI and release. Including SHA-256 sidecars, Gitea's draft has 8 assets and
+GitHub's has 14.
 No APT repository, package signing, or automatic public/crates.io publishing is provided.
 
 The [FFI guide](docs/ffi.md) includes complete examples, linking commands,

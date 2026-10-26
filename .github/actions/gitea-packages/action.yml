@@ -1,0 +1,59 @@
+name: Gitea release packages
+description: Build and consume Linux, Debian, and MinGW packages in a direct Gitea job
+inputs:
+  version:
+    description: Validated Cargo package version
+    required: true
+runs:
+  using: composite
+  steps:
+    # The caller installs Git/TLS before checkout and provides Node 22/Bookworm.
+    - name: Install native and cross-build consumer tools
+      shell: bash
+      run: |
+        apt-get install --no-install-recommends -y curl build-essential python3 dpkg-dev pkg-config binutils xz-utils gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64 wine wine64
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-gnu
+    - name: Check package versions
+      id: version
+      shell: bash
+      env:
+        EXPECTED_VERSION: ${{ inputs.version }}
+      run: |
+        version="$(python3 scripts/release.py version)"
+        test "$version" = "$EXPECTED_VERSION"
+        debian_version="$(python3 scripts/debian.py version)"
+        printf 'debian_version=%s\n' "$debian_version" >> "$GITHUB_OUTPUT"
+    - name: Build Linux ZIP and test extracted consumers
+      shell: bash
+      run: python3 scripts/release.py package --target x86_64-unknown-linux-gnu
+    - name: Build Debian packages and test extracted consumers
+      shell: bash
+      run: python3 scripts/debian.py package
+    - name: Install Debian packages and test installed consumers
+      shell: bash
+      env:
+        DEBIAN_VERSION: ${{ steps.version.outputs.debian_version }}
+      run: |
+        apt-get install --no-install-recommends -y \
+          "./target/dist/libspd1_${DEBIAN_VERSION}_amd64.deb" \
+          "./target/dist/libspd-dev_${DEBIAN_VERSION}_amd64.deb"
+        python3 scripts/debian.py smoke
+    - name: Cross-build Windows ZIP and run extracted consumers under Wine
+      shell: bash
+      run: python3 scripts/mingw.py package
+    - name: Upload verified Gitea packages and checksums
+      uses: ChristopherHX/gitea-upload-artifact@v4
+      with:
+        name: libspd-gitea-packages
+        path: |
+          target/dist/libspd-${{ inputs.version }}-x86_64-unknown-linux-gnu.zip
+          target/dist/libspd-${{ inputs.version }}-x86_64-unknown-linux-gnu.zip.sha256
+          target/dist/libspd-${{ inputs.version }}-x86_64-pc-windows-gnu.zip
+          target/dist/libspd-${{ inputs.version }}-x86_64-pc-windows-gnu.zip.sha256
+          target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb
+          target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
+          target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb
+          target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
+        if-no-files-found: error

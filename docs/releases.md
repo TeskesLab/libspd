@@ -34,7 +34,7 @@ The package is for native consumers; Rust applications normally depend on the `l
 
 ## Debian 12 amd64 packages
 
-The separate Debian release train builds natively in the Debian 12-based `node:22-bookworm-slim` image on both forges. Node is required for JavaScript actions on Gitea, whose runner does not inject it into custom containers. The package baseline is **Debian 12 (Bookworm), amd64**; it is not a promise of compatibility with older Debian releases, other distributions, or other architectures. ZIP packaging remains separate.
+Debian packages build natively in the Debian 12-based `node:22-bookworm-slim` image on both forges: in a reusable GitHub job and in Gitea's direct packaging job. Node is required for JavaScript actions on Gitea, whose runner does not inject it into custom containers. The package baseline is **Debian 12 (Bookworm), amd64**; it is not a promise of compatibility with older Debian releases, other distributions, or other architectures. ZIP packaging remains separate.
 
 Each release adds these assets and their individual `.deb.sha256` sidecars:
 
@@ -64,7 +64,7 @@ python3 scripts/debian.py package
 python3 scripts/debian.py smoke
 ```
 
-Packaging writes both `.deb` files and sidecars to `target/dist/` and tests consumers against extracted packages. The reusable CI job additionally installs both packages with `apt-get --no-install-recommends`, then checks installed pkg-config metadata, headers, static/shared C and C++ consumers, and runtime loader discovery without loader-path overrides. The installed smoke command requires the matching packages and a source checkout: it uses the checkout's synthetic examples against installed headers/libraries, because minimal Debian images can omit documentation files during installation.
+Packaging writes both `.deb` files and sidecars to `target/dist/` and tests consumers against extracted packages. Both the reusable GitHub job and Gitea's composite packaging action additionally install both packages with `apt-get --no-install-recommends`, then check installed pkg-config metadata, headers, static/shared C and C++ consumers, and runtime loader discovery without loader-path overrides. The installed smoke command requires the matching packages and a source checkout: it uses the checkout's synthetic examples against installed headers/libraries, because minimal Debian images can omit documentation files during installation.
 
 These are downloadable binary packages, **not an APT repository**: no repository metadata, package signing, automatic public release, or automatic installation is provided. SHA-256 sidecars detect corruption, not publisher authenticity. Release automation stops at a maintainer-reviewed draft on the corresponding forge.
 
@@ -72,9 +72,11 @@ These are downloadable binary packages, **not an APT repository**: no repository
 ## CI and release triggers
 
 - `ci.yml`: push/pull-request Linux MSRV 1.81 and stable quality checks, version validation, native ZIPs, Windows GNU cross-packaging, and Debian packaging on both forges.
-- `native.yml`: reusable ZIP build with one forge-selected matrix: the original four native GitHub runners, or Linux only in a Debian 12 container on Gitea. Gitea uses system Python 3.11, not a cached Python binary requiring a newer glibc.
-- `mingw.yml`: reusable Debian 12 amd64 cross-build using Rust stable's `x86_64-pc-windows-gnu` target, MinGW C/C++ compilers, and Wine; uploads the ZIP and sidecar as `libspd-mingw-windows-gnu`.
-- `debian.yml`: reusable Debian 12 amd64 build, extracted-consumer tests, apt installation, and installed-consumer tests on both forges; uploads the two packages and sidecars as `libspd-debian-amd64`.
+- On GitHub, both `ci.yml` and `release.yml` call the reusable packaging workflows below. Their package jobs are guarded to run only on GitHub.
+  - `native.yml`: static four-target matrix on Ubuntu 22.04, Windows 2022/MSVC, macOS 15 Intel, and macOS 15 ARM64, using Python 3.11 and native C/C++ consumer execution.
+  - `mingw.yml`: Debian 12 amd64 cross-build using Rust stable's `x86_64-pc-windows-gnu` target, MinGW C/C++ compilers, and Wine; uploads the ZIP and sidecar as `libspd-mingw-windows-gnu`.
+  - `debian.yml`: Debian 12 amd64 build, extracted-consumer tests, apt installation, and installed-consumer tests; uploads the two packages and sidecars as `libspd-debian-amd64`.
+- On Gitea, both parent workflows use a direct top-level packaging job in `node:22-bookworm-slim`, not a nested reusable workflow. After installing Git/TLS support and checking out the source without persisted credentials, the job calls the local composite action `.github/actions/gitea-packages/action.yml` with the validated version. This action shares the Linux ZIP, Debian package/install-smoke, and MinGW/Wine packaging steps between CI and release, using system Python 3.11 and Rust stable. It uploads all eight package/checksum files together as `libspd-gitea-packages`.
 - `release.yml`: version-tag pushes and manual dispatch on both forges. Manual dispatch builds downloadable workflow artifacts only; it does not create a release.
 - A matching `vVERSION` tag creates a **draft** release on the corresponding forge after all its packaging/consumer jobs and both Linux quality/MSRV jobs succeed. No tag is created by the workflow. The root and FFI package versions must match, and the tag must match that exact version.
 - Release write permission is limited to the draft-release job in the canonical repositories (`TeskesLab/libspd` on GitHub and `TeskesLabOrg/libspd` on Gitea). Build jobs use read-only repository access. No release API is invoked from untrusted pull-request builds. The privileged job does not execute downloaded code: it validates the exact expected package names and checksums before attaching an explicit asset list.

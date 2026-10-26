@@ -57,6 +57,7 @@ jobs:
 
   native:
     name: Native packages
+    if: github.server_url == 'https://github.com'
     needs: version
     uses: ./.github/workflows/native.yml
     with:
@@ -64,6 +65,7 @@ jobs:
 
   debian:
     name: Debian packages
+    if: github.server_url == 'https://github.com'
     needs: version
     uses: ./.github/workflows/debian.yml
     with:
@@ -71,10 +73,29 @@ jobs:
 
   mingw:
     name: MinGW Windows package
+    if: github.server_url == 'https://github.com'
     needs: version
     uses: ./.github/workflows/mingw.yml
     with:
       version: ${{ needs.version.outputs.version }}
+
+  gitea_packages:
+    name: Gitea packages
+    if: github.server_url != 'https://github.com'
+    needs: version
+    runs-on: ubuntu-22.04
+    container: node:22-bookworm-slim
+    steps:
+      - name: Install checkout tools
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates git
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/gitea-packages
+        with:
+          version: ${{ needs.version.outputs.version }}
 
   draft:
     name: Create draft release
@@ -157,7 +178,7 @@ jobs:
 
   gitea_draft:
     name: Create Gitea draft release
-    needs: [version, native, debian, mingw, check]
+    needs: [version, gitea_packages, check]
     if: >-
       github.event_name == 'push' &&
       github.server_url != 'https://github.com' &&

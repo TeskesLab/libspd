@@ -14,6 +14,7 @@ permissions:
 jobs:
   package:
     name: Debian 12 amd64
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-22.04
     container: node:22-bookworm-slim
     defaults:
@@ -50,19 +51,7 @@ jobs:
       - name: Test installed pkg-config and C/C++ consumers
         run: python3 scripts/debian.py smoke
       - name: Upload verified Debian packages and SHA256
-        if: github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
-        with:
-          name: libspd-debian-amd64
-          path: |
-            target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb
-            target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
-            target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb
-            target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
-          if-no-files-found: error
-      - name: Upload verified Debian packages and SHA256 to Gitea
-        if: github.server_url != 'https://github.com'
-        uses: ChristopherHX/gitea-upload-artifact@v4
         with:
           name: libspd-debian-amd64
           path: |
