@@ -112,6 +112,12 @@ def check_host(target, env):
         raise ValueError(f"target {target!r} does not match rustc host: {hosts!r}")
     if system == "Windows":
         compilers = (executable("cl"), executable("cl"))
+        # Git Bash can put GNU coreutils' link.exe ahead of the MSVC linker.
+        # Use the linker paired with the selected native C/C++ compiler.
+        linker = Path(compilers[0]).with_name("link.exe")
+        if not linker.is_file():
+            raise ValueError(f"MSVC linker not found beside cl.exe: {linker}")
+        env.setdefault("CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", str(linker))
     else:
         # Overrides are executable paths, not shell commands or flags.
         compilers = (executable(os.environ.get("CC", "cc")), executable(os.environ.get("CXX", "c++")))

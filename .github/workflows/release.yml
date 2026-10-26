@@ -12,31 +12,34 @@ permissions:
 jobs:
   version:
     name: Validate release version
-    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-22.04
+    container: debian:bookworm-slim
     outputs:
       version: ${{ steps.version.outputs.version }}
+      debian_version: ${{ steps.version.outputs.debian_version }}
     steps:
+      - name: Install version validation tools
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates git python3
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - name: Validate manifest versions and tag
         id: version
         shell: bash
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            version="$(python scripts/release.py version --tag "$GITHUB_REF_NAME")"
+            version="$(python3 scripts/release.py version --tag "$GITHUB_REF_NAME")"
           else
-            version="$(python scripts/release.py version)"
+            version="$(python3 scripts/release.py version)"
           fi
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          debian_version="$(python3 scripts/debian.py version)"
+          printf 'debian_version=%s\n' "$debian_version" >> "$GITHUB_OUTPUT"
 
   check:
     name: Release quality / Rust ${{ matrix.toolchain }}
-    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -59,11 +62,26 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
 
+  debian:
+    name: Debian packages
+    needs: version
+    uses: ./.github/workflows/debian.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  mingw:
+    name: MinGW Windows package
+    needs: version
+    uses: ./.github/workflows/mingw.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
   draft:
     name: Create draft release
-    needs: [version, native, check]
+    needs: [version, native, debian, mingw, check]
     if: >-
       github.event_name == 'push' &&
+      github.server_url == 'https://github.com' &&
       github.ref_type == 'tag' &&
       startsWith(github.ref, 'refs/tags/v') &&
       github.repository == 'TeskesLab/libspd'
@@ -75,7 +93,7 @@ jobs:
       cancel-in-progress: false
     steps:
       # No checkout or execution of downloaded code in this privileged job.
-      - name: Download all four verified native packages
+      - name: Download verified native and Debian packages
         uses: actions/download-artifact@v4
         with:
           pattern: libspd-*
@@ -88,6 +106,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          DEBIAN_VERSION: ${{ needs.version.outputs.debian_version }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           test "$RELEASE_TAG" = "v$RELEASE_VERSION"
@@ -101,6 +120,7 @@ jobs:
           targets=(
             x86_64-unknown-linux-gnu
             x86_64-pc-windows-msvc
+            x86_64-pc-windows-gnu
             x86_64-apple-darwin
             aarch64-apple-darwin
           )
@@ -115,12 +135,152 @@ jobs:
             test "$actual_checksum" = "$expected_checksum"
             assets+=("$archive" "$checksum")
           done
+          for package in libspd1 libspd-dev; do
+            archive="${package}_${DEBIAN_VERSION}_amd64.deb"
+            checksum="$archive.sha256"
+            test -f "$archive"
+            test -f "$checksum"
+            expected_checksum="$(sha256sum "$archive")"
+            actual_checksum="$(cat "$checksum")"
+            test "$actual_checksum" = "$expected_checksum"
+            assets+=("$archive" "$checksum")
+          done
           options=(--draft --verify-tag --title "$RELEASE_TAG")
           if [[ "${RELEASE_VERSION%%+*}" == *-* ]]; then
             options+=(--prerelease)
           fi
-          notes="Native ZIP packages include the C header, static and shared libraries, and C/C++ examples. Each archive passed extracted-package consumer checks on its native runner. SHA256 sidecars are attached.
+          notes="ZIP packages include the C header, static and shared libraries, and C/C++ examples. Native archives passed extracted-package consumer checks on their matching runners; the MinGW Windows archive passed cross-compiled C/C++ consumers under Wine. Debian 12 amd64 packages provide the libspd1 runtime and libspd-dev development files; extracted and apt-installed C/C++ consumers passed in Debian Bookworm. SHA256 sidecars are attached. No APT repository or package signing is provided.
 
           Automated by MisterMal"
           # Existing releases fail rather than being modified or overwritten.
           gh release create "$RELEASE_TAG" "${assets[@]}" "${options[@]}" --notes "$notes"
+
+  gitea_draft:
+    name: Create Gitea draft release
+    needs: [version, native, debian, mingw, check]
+    if: >-
+      github.event_name == 'push' &&
+      github.server_url != 'https://github.com' &&
+      github.ref_type == 'tag' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.repository == 'TeskesLabOrg/libspd'
+    runs-on: ubuntu-22.04
+    container: debian:bookworm-slim
+    permissions:
+      contents: write
+    concurrency:
+      group: native-release-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      # No checkout or execution of downloaded code in this privileged job.
+      - name: Install release API tools
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates python3
+      - name: Download verified Gitea packages
+        uses: ChristopherHX/gitea-download-artifact@v4
+        with:
+          pattern: libspd-*
+          merge-multiple: true
+          path: target/dist
+      - name: Validate attachments and create unpublished Gitea draft
+        shell: bash
+        working-directory: target/dist
+        env:
+          RELEASE_TOKEN: ${{ github.token }}
+          RELEASE_API: ${{ github.api_url }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          DEBIAN_VERSION: ${{ needs.version.outputs.debian_version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from urllib.parse import quote
+          from urllib.request import Request, urlopen
+          import uuid
+
+          version = os.environ["RELEASE_VERSION"]
+          tag = os.environ["RELEASE_TAG"]
+          if tag != "v" + version:
+              raise RuntimeError("release tag must match the Cargo version")
+          names = [
+              f"libspd-{version}-{target}.zip"
+              for target in ("x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu")
+          ]
+          names += [
+              f'{package}_{os.environ["DEBIAN_VERSION"]}_amd64.deb'
+              for package in ("libspd1", "libspd-dev")
+          ]
+          assets = []
+          for name in names:
+              archive = Path(name)
+              sidecar = Path(name + ".sha256")
+              if archive.is_symlink() or sidecar.is_symlink():
+                  raise RuntimeError("release attachments must be regular files")
+              digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+              if sidecar.read_text(encoding="ascii") != f"{digest}  {name}\n":
+                  raise RuntimeError(f"checksum mismatch for {name}")
+              assets.extend((archive, sidecar))
+
+          base = (
+              os.environ["RELEASE_API"].rstrip("/") + "/repos/" +
+              os.environ["RELEASE_REPOSITORY"]
+          )
+          headers = {"Authorization": "token " + os.environ["RELEASE_TOKEN"]}
+
+          def api(path, data=None, content_type="application/json"):
+              request_headers = dict(headers)
+              if data is not None:
+                  request_headers["Content-Type"] = content_type
+              request = Request(base + path, data=data, headers=request_headers)
+              with urlopen(request, timeout=120) as response:
+                  return json.load(response)
+
+          # Confirm the tag exists; never let the release API create it.
+          api("/tags/" + quote(tag, safe=""))
+          # Include drafts explicitly, and paginate both draft/public results.
+          for draft in ("true", "false"):
+              page = 1
+              while True:
+                  releases = api(f"/releases?draft={draft}&limit=50&page={page}")
+                  if any(release["tag_name"] == tag for release in releases):
+                      raise RuntimeError(f"release already exists for {tag}")
+                  if not releases:
+                      break
+                  page += 1
+          notes = (
+              "Linux and MinGW Windows ZIPs and Debian amd64 packages. "
+              "Extracted-package consumers passed; Windows consumers ran under Wine. "
+              "Debian packages also passed installed-consumer checks. "
+              "SHA256 sidecars are attached.\n\nAutomated by MisterMal"
+          )
+          draft = api("/releases", json.dumps({
+              "tag_name": tag, "name": tag, "draft": True,
+              "prerelease": "-" in version.split("+", 1)[0], "body": notes,
+          }).encode("utf-8"))
+          if not draft["draft"] or draft["tag_name"] != tag:
+              raise RuntimeError("API did not create the requested draft")
+          release_id = draft["id"]
+          for asset in assets:
+              boundary = uuid.uuid4().hex
+              prefix = (
+                  f"--{boundary}\r\n"
+                  f'Content-Disposition: form-data; name="attachment"; filename="{asset.name}"\r\n'
+                  "Content-Type: application/octet-stream\r\n\r\n"
+              ).encode("ascii")
+              body = prefix + asset.read_bytes() + f"\r\n--{boundary}--\r\n".encode("ascii")
+              attachment = api(
+                  f"/releases/{release_id}/assets?name=" + quote(asset.name, safe=""),
+                  body, f"multipart/form-data; boundary={boundary}",
+              )
+              if attachment["name"] != asset.name or attachment["size"] != asset.stat().st_size:
+                  raise RuntimeError(f"upload verification failed for {asset.name}")
+          attached = api(f"/releases/{release_id}/assets")
+          if len(attached) != len(assets) or {item["name"] for item in attached} != {item.name for item in assets}:
+              raise RuntimeError("draft does not contain the exact expected attachments")
+          print(draft["html_url"])
+          PY

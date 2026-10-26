@@ -1,0 +1,73 @@
+name: Debian packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Validated Cargo package version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Debian 12 amd64
+    runs-on: ubuntu-22.04
+    container: debian:bookworm-slim
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Install Git and TLS support before checkout in the minimal container.
+      - name: Install Debian build and consumer tools
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check package version
+        id: version
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="$(python3 scripts/release.py version)"
+          test "$version" = "$EXPECTED_VERSION"
+          debian_version="$(python3 scripts/debian.py version)"
+          printf 'debian_version=%s\n' "$debian_version" >> "$GITHUB_OUTPUT"
+      - name: Build Debian packages and test extracted consumers
+        run: python3 scripts/debian.py package
+      - name: Install runtime and development packages
+        env:
+          DEBIAN_VERSION: ${{ steps.version.outputs.debian_version }}
+        run: |
+          apt-get install --no-install-recommends -y \
+            "./target/dist/libspd1_${DEBIAN_VERSION}_amd64.deb" \
+            "./target/dist/libspd-dev_${DEBIAN_VERSION}_amd64.deb"
+      - name: Test installed pkg-config and C/C++ consumers
+        run: python3 scripts/debian.py smoke
+      - name: Upload verified Debian packages and SHA256
+        if: github.server_url == 'https://github.com'
+        uses: actions/upload-artifact@v4
+        with:
+          name: libspd-debian-amd64
+          path: |
+            target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb
+            target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
+            target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb
+            target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
+          if-no-files-found: error
+      - name: Upload verified Debian packages and SHA256 to Gitea
+        if: github.server_url != 'https://github.com'
+        uses: ChristopherHX/gitea-upload-artifact@v4
+        with:
+          name: libspd-debian-amd64
+          path: |
+            target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb
+            target/dist/libspd1_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
+            target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb
+            target/dist/libspd-dev_${{ steps.version.outputs.debian_version }}_amd64.deb.sha256
+          if-no-files-found: error

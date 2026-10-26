@@ -126,7 +126,7 @@ hardware compatibility, or full JEDEC conformance.
 The public repository is [TeskesLab/libspd](https://github.com/TeskesLab/libspd).
 Both Cargo manifests declare repository, homepage, documentation links, and
 registry categories/keywords. The FFI dependency specifies both a local path and
-version `0.1.0`; registry publication requires publishing the core crate first.
+version `0.0.1`; registry publication requires publishing the core crate first.
 The core package was locally packaged and compiled with
 `cargo package -p libspd --allow-dirty`. This does not publish anything or verify
 crate-name availability. Native consumers still obtain `include/libspd.h` from

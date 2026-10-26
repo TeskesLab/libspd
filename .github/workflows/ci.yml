@@ -27,29 +27,42 @@ jobs:
 
   version:
     name: Validate package version
-    # Gitea shares quality checks, not GitHub's native release services.
-    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-22.04
+    container: debian:bookworm-slim
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Install version validation tools
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates git python3
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - name: Validate manifest versions
         id: version
         shell: bash
         run: |
-          version="$(python scripts/release.py version)"
+          version="$(python3 scripts/release.py version)"
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
   native:
     name: Native packages
-    if: github.server_url == 'https://github.com'
     needs: version
     uses: ./.github/workflows/native.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  debian:
+    name: Debian packages
+    needs: version
+    uses: ./.github/workflows/debian.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  mingw:
+    name: Windows GNU cross-package
+    needs: version
+    uses: ./.github/workflows/mingw.yml
     with:
       version: ${{ needs.version.outputs.version }}

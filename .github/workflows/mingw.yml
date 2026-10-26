@@ -1,0 +1,58 @@
+name: Windows GNU cross-package
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Validated Cargo package version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Windows x64 MinGW / Wine
+    runs-on: ubuntu-22.04
+    container: debian:bookworm-slim
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install cross-build and Windows consumer tools
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64 wine wine64
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - name: Check package version
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="$(python3 scripts/release.py version)"
+          test "$version" = "$EXPECTED_VERSION"
+      - name: Cross-build ZIP and run extracted Windows C/C++ consumers with Wine
+        run: python3 scripts/mingw.py package
+      - name: Upload verified Windows GNU package and SHA256
+        if: github.server_url == 'https://github.com'
+        uses: actions/upload-artifact@v4
+        with:
+          name: libspd-mingw-windows-gnu
+          path: |
+            target/dist/libspd-${{ inputs.version }}-x86_64-pc-windows-gnu.zip
+            target/dist/libspd-${{ inputs.version }}-x86_64-pc-windows-gnu.zip.sha256
+          if-no-files-found: error
+      - name: Upload verified Windows GNU package and SHA256 to Gitea
+        if: github.server_url != 'https://github.com'
+        uses: ChristopherHX/gitea-upload-artifact@v4
+        with:
+          name: libspd-mingw-windows-gnu
+          path: |
+            target/dist/libspd-${{ inputs.version }}-x86_64-pc-windows-gnu.zip
+            target/dist/libspd-${{ inputs.version }}-x86_64-pc-windows-gnu.zip.sha256
+          if-no-files-found: error
