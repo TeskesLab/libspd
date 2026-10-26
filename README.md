@@ -24,7 +24,8 @@ configuration-level semantic validation.
 
 ## Rust quick start
 
-Requires Rust **1.81+**. crates.io publication is planned; for a local checkout:
+Requires Rust **1.81+**. For a local checkout (crates.io setup is pending; see the
+[publishing guide](docs/releases.md#cratesio-publishing)):
 
 ```toml
 [dependencies]
@@ -74,7 +75,9 @@ GitHub uses reusable packaging workflows with a four-target native matrix;
 Gitea uses a direct Debian-container job and local composite actions shared
 by CI and release. Including SHA-256 sidecars, Gitea's draft has 14 assets and
 GitHub's has 20.
-No APT repository, package signing, or automatic public/crates.io publishing is provided.
+No APT repository, package signing, or automatic public release is provided.
+Only the Rust `libspd` crate has a separate, manually approved
+[crates.io publishing workflow](docs/releases.md#cratesio-publishing).
 
 The [FFI guide](docs/ffi.md) includes complete examples, linking commands,
 ownership rules, and callback contracts. Applications supply hardware access;

@@ -1,6 +1,35 @@
-# Native binary releases
+# Releases and crates.io publishing
 
 Version-tag workflows prepare maintainer-reviewed **draft** releases on both [Gitea](https://gitnet.teske.zip/TeskesLabOrg/libspd/releases) and [GitHub](https://github.com/TeskesLab/libspd/releases). Both forges build Linux x64, cross-compiled Linux ARM64, and cross-compiled Windows GNU ZIPs plus Debian amd64/arm64 runtime/development packages. GitHub also builds native Windows MSVC and both macOS architectures. These workflows do not publish Rust crates to crates.io or provide hardware drivers.
+
+Only the Rust API crate, `libspd`, is intended for crates.io publication. The `libspd-ffi` crate has `publish = false`; C/C++ users consume the native release packages or build it from this repository.
+
+## crates.io publishing
+
+Only `libspd` is published to crates.io: it is the portable Rust source crate, not a native ZIP, Debian package, shared library, or hardware driver. `libspd-ffi` remains `publish = false`. Native packages still follow the separate maintainer-reviewed draft-release flow below; publishing a crate neither publishes those drafts nor uploads their assets.
+
+Before authorizing any upload, a maintainer must verify these prerequisites:
+
+1. Check that the `libspd` name is available on crates.io, or that the publishing account has ownership of the existing crate. Confirm the intended owners before publishing.
+2. Consult the current [crates.io trusted-publishing documentation](https://crates.io/docs/trusted-publishing), especially whether first-crate/bootstrap publishing is supported. Do not assume OIDC can create a new crate. If bootstrap requires another method, arrange a separately authorized initial publication using the current official procedure; never place credentials in this repository.
+3. Configure the crates.io trusted publisher with the exact GitHub owner `TeskesLab`, repository `libspd`, workflow filename `publish.yml`, and environment `crates-io`.
+4. Create the GitHub `crates-io` environment with a nonempty required-human-reviewer list. Self-approval is currently allowed for single-maintainer testing; **prevent self-review** can be enabled later without changing the workflow. Until then, approval does not provide independent review. Select custom deployment branch/tag policies with exactly one policy: tag `v*`, and no branch policies. The workflow checks required reviewers and these tag restrictions through the GitHub API and fails closed if they are missing or unreadable. Ensure these protections are available and enforced for the repository's GitHub plan. YAML alone does not configure these settings. See [GitHub deployment environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+
+Keep the root and FFI package versions and the FFI dependency synchronized (currently `0.0.3`), including the workspace lockfile. Crates.io versions are immutable: a published version cannot be replaced with different contents, even after yanking. Fix a published crate by releasing a new version, not by moving its tag or retrying different contents under the same version.
+
+From the clean source checkout for the intended version, the exact local crate dry run is:
+
+```sh
+cargo publish --dry-run -p libspd --locked
+```
+
+For an authorized crates.io upload, manually dispatch `.github/workflows/publish.yml` on the matching `vVERSION` tag, for example `v0.0.3`; do not dispatch on a branch. The workflow validates the tag against both package versions, then verifies the source crate before the protected publishing job requests approval through `crates-io`. Review the verification result and tagged source before approving. Only that protected job receives `id-token: write`; `rust-lang/crates-io-auth-action@v1` exchanges GitHub OIDC for a short-lived token and revokes it in its post-step. The upload command is exactly:
+
+```sh
+cargo publish --locked -p libspd --registry crates-io
+```
+
+The token is supplied to Cargo through the job environment, never committed or pasted into workflow files. `publish.yml` is GitHub-only: Gitea does not upload crates, obtain crates.io credentials, or bypass GitHub approval. Tag pushes and the existing native `release.yml` workflow do not automatically upload to crates.io. No remote settings, tag creation, workflow dispatch, or uploads are implied by preparing these files.
 
 ## Build targets
 
@@ -55,9 +84,9 @@ Debian changelog dates use `SOURCE_DATE_EPOCH` when set, otherwise the source Gi
 Verify the downloaded sidecars, then install both matching local files (replace the example version):
 
 ```sh
-sha256sum -c libspd1_0.0.2-1_amd64.deb.sha256
-sha256sum -c libspd-dev_0.0.2-1_amd64.deb.sha256
-sudo apt-get install --no-install-recommends ./libspd1_0.0.2-1_amd64.deb ./libspd-dev_0.0.2-1_amd64.deb
+sha256sum -c libspd1_0.0.3-1_amd64.deb.sha256
+sha256sum -c libspd-dev_0.0.3-1_amd64.deb.sha256
+sudo apt-get install --no-install-recommends ./libspd1_0.0.3-1_amd64.deb ./libspd-dev_0.0.3-1_amd64.deb
 ```
 
 For native local packaging in a Debian 12 amd64 checkout, install `ca-certificates curl git build-essential python3 dpkg-dev pkg-config binutils xz-utils` and Rust stable, then run:
@@ -89,23 +118,23 @@ These are downloadable binary packages, **not an APT repository**: no repository
 
 ### Exact release asset sets
 
-For version `0.0.2`, **both** forges attach these seven package assets:
+For version `0.0.3`, **both** forges attach these seven package assets:
 
-- `libspd-0.0.2-x86_64-unknown-linux-gnu.zip`
-- `libspd-0.0.2-aarch64-unknown-linux-gnu.zip`
-- `libspd-0.0.2-x86_64-pc-windows-gnu.zip`
-- `libspd1_0.0.2-1_amd64.deb`
-- `libspd-dev_0.0.2-1_amd64.deb`
-- `libspd1_0.0.2-1_arm64.deb`
-- `libspd-dev_0.0.2-1_arm64.deb`
+- `libspd-0.0.3-x86_64-unknown-linux-gnu.zip`
+- `libspd-0.0.3-aarch64-unknown-linux-gnu.zip`
+- `libspd-0.0.3-x86_64-pc-windows-gnu.zip`
+- `libspd1_0.0.3-1_amd64.deb`
+- `libspd-dev_0.0.3-1_amd64.deb`
+- `libspd1_0.0.3-1_arm64.deb`
+- `libspd-dev_0.0.3-1_arm64.deb`
 
 GitHub additionally attaches these three package assets:
 
-- `libspd-0.0.2-x86_64-pc-windows-msvc.zip`
-- `libspd-0.0.2-x86_64-apple-darwin.zip`
-- `libspd-0.0.2-aarch64-apple-darwin.zip`
+- `libspd-0.0.3-x86_64-pc-windows-msvc.zip`
+- `libspd-0.0.3-x86_64-apple-darwin.zip`
+- `libspd-0.0.3-aarch64-apple-darwin.zip`
 
-Every package asset has its own same-name `.sha256` sidecar. Gitea therefore has **three ZIPs, four Debian packages, and seven checksum files (14 assets)**. GitHub has **six ZIPs, four Debian packages, and ten checksum files (20 assets)**. These filenames use the unchanged `0.0.2` manifest version; adding ARM64 support does not itself bump the version, create/replace a tag, or publish a release.
+Every package asset has its own same-name `.sha256` sidecar. Gitea therefore has **three ZIPs, four Debian packages, and seven checksum files (14 assets)**. GitHub has **six ZIPs, four Debian packages, and ten checksum files (20 assets)**.
 
 Draft creation is a remote publication action; a maintainer must authorize pushing the version tag and triggering release preparation, then inspect assets/notes before separately making the draft public. Existing releases are not silently overwritten; resolve an existing draft deliberately before rerunning a failed publication job.
 
@@ -117,7 +146,7 @@ Requires Python 3.11+, Cargo/Rust stable, and native C/C++ development tools for
 
 ```sh
 python scripts/release.py version
-python scripts/release.py version --tag v0.0.2
+python scripts/release.py version --tag v0.0.3
 python scripts/release.py package --target x86_64-unknown-linux-gnu
 ```
 
@@ -141,17 +170,17 @@ python3 scripts/arm64.py package
 python3 scripts/debian.py package --architecture arm64
 ```
 
-The ZIP command writes `target/dist/libspd-0.0.2-aarch64-unknown-linux-gnu.zip` and its `.sha256` sidecar, using the validated manifest version. It extracts the package, cross-compiles the C static and C++ shared consumers, and runs them with explicit `qemu-aarch64` invocation. Consumer failures fail packaging; a successful cross-build alone is insufficient.
+The ZIP command writes `target/dist/libspd-0.0.3-aarch64-unknown-linux-gnu.zip` and its `.sha256` sidecar, using the validated manifest version. It extracts the package, cross-compiles the C static and C++ shared consumers, and runs them with explicit `qemu-aarch64` invocation. Consumer failures fail packaging; a successful cross-build alone is insufficient.
 
 To install and check the arm64 Debian packages, optionally alongside the matching amd64 packages shown above:
 
 ```sh
 (cd target/dist && sha256sum -c \
-  libspd1_0.0.2-1_arm64.deb.sha256 \
-  libspd-dev_0.0.2-1_arm64.deb.sha256)
+  libspd1_0.0.3-1_arm64.deb.sha256 \
+  libspd-dev_0.0.3-1_arm64.deb.sha256)
 sudo apt-get install --no-install-recommends \
-  ./target/dist/libspd1_0.0.2-1_arm64.deb \
-  ./target/dist/libspd-dev_0.0.2-1_arm64.deb
+  ./target/dist/libspd1_0.0.3-1_arm64.deb \
+  ./target/dist/libspd-dev_0.0.3-1_arm64.deb
 python3 scripts/debian.py smoke --architecture arm64
 ```
 
@@ -166,7 +195,7 @@ rustup target add x86_64-pc-windows-gnu
 python3 scripts/mingw.py package
 ```
 
-The separate cross-package command writes `target/dist/libspd-0.0.2-x86_64-pc-windows-gnu.zip` and its `.sha256` sidecar (using the validated manifest version). It extracts the archive, compiles Windows C and C++ consumers against the extracted headers and shared/static libraries, and executes those consumers with Wine. A successful Linux cross-build alone is not sufficient: consumer execution failures fail packaging.
+The separate cross-package command writes `target/dist/libspd-0.0.3-x86_64-pc-windows-gnu.zip` and its `.sha256` sidecar (using the validated manifest version). It extracts the archive, compiles Windows C and C++ consumers against the extracted headers and shared/static libraries, and executes those consumers with Wine. A successful Linux cross-build alone is not sufficient: consumer execution failures fail packaging.
 
 For a downloaded package, verify its SHA-256 using your platform's checksum tool, unpack it, add its `include/` to your include paths and its `lib/` to linker paths. See [the FFI guide](ffi.md) for ownership and function contracts, and [build instructions](build.md) for source-checkout examples. Shared-library deployments must make the matching library discoverable to the OS loader. Static linking can require target-specific Rust system libraries; inspect linker diagnostics rather than copying Linux link flags to Windows/macOS.
 

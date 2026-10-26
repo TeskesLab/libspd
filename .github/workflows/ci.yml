@@ -24,6 +24,9 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: rustfmt, clippy
       - run: sh scripts/check.sh
+      - name: Check crates.io package
+        if: matrix.toolchain == 'stable'
+        run: cargo publish --dry-run -p libspd --locked
 
   version:
     name: Validate package version

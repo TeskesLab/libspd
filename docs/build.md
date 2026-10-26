@@ -124,14 +124,16 @@ hardware compatibility, or full JEDEC conformance.
 ## Publication metadata
 
 The public repository is [TeskesLab/libspd](https://github.com/TeskesLab/libspd).
-Both Cargo manifests declare repository, homepage, documentation links, and
-registry categories/keywords. The FFI dependency specifies both a local path and
-version `0.0.2`; registry publication requires publishing the core crate first.
-The core package was locally packaged and compiled with
-`cargo package -p libspd --allow-dirty`. This does not publish anything or verify
-crate-name availability. Native consumers still obtain `include/libspd.h` from
-the matching public repository revision; the FFI crate archive does not bundle
-that workspace-level header.
+Both Cargo manifests declare repository, homepage, and registry categories/keywords.
+The core crate also declares its docs.rs documentation link.
+Only `libspd` is intended for crates.io publication; `libspd-ffi` sets
+`publish = false` and keeps its local path dependency synchronized with the core
+version, currently `0.0.3`.
+Verify the core source package from a clean checkout with
+`cargo publish --dry-run -p libspd --locked`; this does not upload anything.
+Native consumers obtain the matching header and libraries from release packages,
+or build the FFI crate from this repository.
+See [publishing prerequisites and approval](releases.md#cratesio-publishing).
 
 ## Rust documentation coverage
 

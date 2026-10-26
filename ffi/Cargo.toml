@@ -1,13 +1,13 @@
 [package]
 name = "libspd-ffi"
-version = "0.0.2"
+version = "0.0.3"
+publish = false
 edition = "2021"
 rust-version = "1.81"
 license = "Apache-2.0"
 description = "C ABI for the hardware-independent libspd image library"
 repository = "https://github.com/TeskesLab/libspd"
 homepage = "https://github.com/TeskesLab/libspd"
-documentation = "https://docs.rs/libspd-ffi"
 keywords = ["spd", "memory", "ddr", "ffi"]
 categories = ["parser-implementations", "external-ffi-bindings"]
 
@@ -16,4 +16,4 @@ name = "spd"
 crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
-libspd = { version = "0.0.2", path = ".." }
+libspd = { version = "0.0.3", path = ".." }

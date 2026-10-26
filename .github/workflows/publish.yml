@@ -1,0 +1,105 @@
+name: Publish libspd to crates.io
+
+# Dispatch this workflow manually with an existing v* tag as the selected ref.
+# Branch dispatches, pushes, pull requests, forks, and Gitea cannot publish.
+# Before dispatch, configure the GitHub crates-io environment with required
+# reviewers and exactly one deployment policy: tag v*. Self-approval is allowed.
+# Configure the matching crates.io trusted publisher for this repository,
+# publish.yml, and environment crates-io. No long-lived token secret is used.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crates-io-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify tagged package and approval gate
+    if: >-
+      github.server_url == 'https://github.com' &&
+      github.repository == 'TeskesLab/libspd' &&
+      github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-22.04
+    steps:
+      # Use the immutable commit of the dispatched tag in both jobs, even if
+      # somebody moves the tag while verification or approval is pending.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate exact release tag
+        run: python3 scripts/release.py version --tag "$GITHUB_REF_NAME"
+      - name: Require configured human approval and tag restrictions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          def api(path):
+              return json.loads(subprocess.check_output(["gh", "api", path], text=True))
+
+          path = f"repos/{os.environ['GITHUB_REPOSITORY']}/environments/crates-io"
+          environment = api(path)
+          rules = environment.get("protection_rules", [])
+          approval = [rule for rule in rules if rule.get("type") == "required_reviewers"]
+          if not any(rule.get("reviewers") for rule in approval):
+              raise SystemExit("crates-io must require human reviewers")
+          policy = environment.get("deployment_branch_policy") or {}
+          if policy.get("custom_branch_policies") is not True or policy.get("protected_branches") is not False:
+              raise SystemExit("crates-io must use custom deployment policies")
+          policies = api(f"{path}/deployment-branch-policies?per_page=100")
+          entries = policies.get("branch_policies", [])
+          if (policies.get("total_count") != 1 or len(entries) != 1
+                  or entries[0].get("type") != "tag" or entries[0].get("name") != "v*"):
+              raise SystemExit("crates-io must allow exactly one deployment policy: tag v*")
+          PY
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - run: sh scripts/check.sh
+      - name: Check crates.io package
+        run: cargo publish --dry-run -p libspd --locked
+
+  publish:
+    name: Publish approved tagged package
+    needs: verify
+    if: >-
+      github.server_url == 'https://github.com' &&
+      github.repository == 'TeskesLab/libspd' &&
+      github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-22.04
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Revalidate exact release tag before authentication
+        run: python3 scripts/release.py version --tag "$GITHUB_REF_NAME"
+      - name: Authenticate with crates.io trusted publishing
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish libspd
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked -p libspd --registry crates-io
